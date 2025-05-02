@@ -32,13 +32,13 @@ def criar_grafo_pre_requisitos(df):
     # Criando os nós (disciplinas) e as arestas (pré-requisitos)
     for _, row in df.iterrows():
         if pd.notna(row['disciplina 1']):
-            G.add_edge(row['disciplina_ufabc_edit'], row['disciplina 1'])
+            G.add_edge(row['nome'], row['disciplina 1'])
         if pd.notna(row['disciplina 2']):
-            G.add_edge(row['disciplina_ufabc_edit'], row['disciplina 2'])
+            G.add_edge(row['nome'], row['disciplina 2'])
         if pd.notna(row['disciplina 3']):
-            G.add_edge(row['disciplina_ufabc_edit'], row['disciplina 3'])
+            G.add_edge(row['nome'], row['disciplina 3'])
         if pd.notna(row['disciplina 4']):
-            G.add_edge(row['disciplina_ufabc_edit'], row['disciplina 4'])
+            G.add_edge(row['nome'], row['disciplina 4'])
     
     # Calculando as medidas de centralidade
     centralidade = nx.betweenness_centrality(G)
@@ -68,11 +68,11 @@ def calcular_similaridade_semantica(df):
     embeddings = []
     
     for _, row in df.iterrows():
-        ementa = row['disciplina_ufabc_edit']  # Usando o nome da disciplina ou ementa
+        ementa = row['nome']  # Usando o nome da disciplina ou ementa
         embeddings.append(obter_embedding_bert(ementa))
     
     similaridade = cosine_similarity(embeddings)
-    return pd.DataFrame(similaridade, columns=df['disciplina_ufabc_edit'], index=df['disciplina_ufabc_edit'])
+    return pd.DataFrame(similaridade, columns=df['nome'], index=df['nome'])
 
 # Função principal do módulo de enriquecimento de dados
 def enriquecer_dados(df):
@@ -80,13 +80,18 @@ def enriquecer_dados(df):
     Enriquecer os dados com componentes TPEI, pré-requisitos e análise semântica.
     """
     # Extrair componentes TPEI
-    df['componentes_tpei'] = df['disciplina_ufabc_edit'].apply(extrair_componentes_tpei)
-    
+    df['componentes_tpei'] = df['nome'].apply(extrair_componentes_tpei)
+
     # Criar grafo de pré-requisitos e calcular centralidade
     grafo, centralidade = criar_grafo_pre_requisitos(df)
-    df['centralidade'] = df['disciplina_ufabc_edit'].map(centralidade)
-    
+    df['centralidade'] = df['nome'].map(centralidade)
+
     # Calcular similaridade semântica
     similaridade_semantica = calcular_similaridade_semantica(df)
+
+    def formatar_tpei_dict(d):
+        return ','.join(f'{k}:{v}' for k, v in d.items() if v is not None)
     
+    df['componentes'] = df['componentes_tpei'].apply(formatar_tpei_dict)
+
     return df, similaridade_semantica, grafo, centralidade
