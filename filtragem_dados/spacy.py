@@ -35,8 +35,8 @@ def carregar_e_preprocessar_catalogo(caminho_arquivo):
     """Carrega catálogo de Excel e realiza pré-processamento básico."""
     try:
         # Carregar dados
-        df = pd.read_excel(caminho_arquivo)
-
+        df = pd.read_excel("""copiar diretorio""")
+        
         # Verificar colunas obrigatórias
         colunas_obrigatorias = ['sigla', 'nome', 'creditos_t', 'creditos_p']
         for coluna in colunas_obrigatorias:
@@ -45,10 +45,9 @@ def carregar_e_preprocessar_catalogo(caminho_arquivo):
       
         # Extrair componentes da sigla
         componentes_sigla = df['sigla'].apply(extrair_sigla_componentes)
-        df['area'] = componentes_sigla.apply(lambda x: x.get('area', '') if x['valido']
-        df['numero'] = componentes_sigla.apply(lambda x: x.get('numero', '') if x['valido'
-        df['versao'] = componentes_sigla.apply(lambda x: x.get('versao', '') if x['valido'
-
+        df['area'] = componentes_sigla.apply(lambda x: x.get('area', '') if x['valido'] else '')
+        df['numero'] = componentes_sigla.apply(lambda x: x.get('numero', '') if x['valido'] else '')
+        df['versao'] = componentes_sigla.apply(lambda x: x.get('versao', '') if x['valido'] else '')
         # Normalizar textos
         if 'ementa' in df.columns:
             df['ementa_norm'] = df['ementa'].apply(normalizar_texto)
