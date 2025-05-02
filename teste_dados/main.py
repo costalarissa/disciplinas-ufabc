@@ -1,13 +1,14 @@
 import pandas as pd
 
-from preprocessamento import filtro_tpei as preprocessar_tpei
+from preprocessamento import carregar_e_preprocessar_catalogo as preprocessar_tpei
 from filtro_tpei import carregar_e_analisar_tsv, filtro_tpei
 from enriquecer_dados import enriquecer_dados
 from filtro_abnt import extrair_dataset_sobreposicao, treinar_classificador_bibliografia, aplicar_filtro_bibliografia
 
 # 1. Carregar e pré-processar
 print("🔄 Carregando e pré-processando dados...")
-df = carregar_e_analisar_tsv("Dados de Equivalência.tsv")
+url = "https://raw.githubusercontent.com/angeloodr/disciplinas-ufabc/refs/heads/main/teste_dados/Dados%20de%20Equival%C3%AAncia.tsv"
+df = carregar_e_analisar_tsv(url)
 
 # Garante colunas de bibliografia (caso venham de arquivo externo sem edição)
 for col in ["bibliografia_ufabc", "bibliografia_fora"]:
