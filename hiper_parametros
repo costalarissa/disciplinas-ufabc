@@ -1,0 +1,113 @@
+import numpy as np
+import pandas as pd
+import shap
+from catboost import CatBoostClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import precision_recall_curve
+from sklearn.svm import SVC
+from sklearn.preprocessing import StandardScaler
+
+# Função para preparar features combinadas (TPEI + pré-requisitos)
+def prepare_combined_features(discipline_pairs, tpei_data, prereq_similarities):
+    features = []
+    for pair in discipline_pairs:
+        tpei_diff = abs(tpei_data[pair[0]] - tpei_data[pair[1]])
+        prereq_sim = prereq_similarities.get(pair, 0.0)
+        features.append([tpei_diff, prereq_sim])
+    return np.array(features)
+
+# Divisão dos dados
+features = prepare_combined_features(discipline_pairs, tpei_data, prereq_similarities)
+X_train, X_val, y_train, y_val = train_test_split(features, labels, test_size=0.2, random_state=42)
+
+# Treinamento do modelo CatBoost
+model_catboost = CatBoostClassifier(
+    iterations=500,
+    learning_rate=0.05,
+    depth=6,
+    loss_function='Logloss',
+    eval_metric='AUC',
+    random_seed=42,
+    verbose=False
+)
+model_catboost.fit(X_train, y_train, eval_set=(X_val, y_val), early_stopping_rounds=20)
+
+# Obtenção de probabilidades e threshold ótimo
+y_pred_proba = model_catboost.predict_proba(X_val)[:, 1]
+precision, recall, thresholds = precision_recall_curve(y_val, y_pred_proba)
+f1_scores = 2 * (precision * recall) / (precision + recall + 1e-8)
+optimal_threshold = thresholds[np.argmax(f1_scores)]
+
+# Aplicar modelo aos pares candidatos
+all_features = prepare_combined_features(candidate_pairs, tpei_data, prereq_similarities)
+combined_scores = model_catboost.predict_proba(all_features)[:, 1]
+filtered_pairs = [pair for pair, score in zip(candidate_pairs, combined_scores) if score >= optimal_threshold]
+
+# Preparar features finais (TPEI, pré-requisitos, ementa)
+def prepare_final_features(pairs, tpei_data, prereq_sim, ementa_sim):
+    features = []
+    for pair in pairs:
+        tpei_diff = abs(tpei_data[pair[0]] - tpei_data[pair[1]])
+        prereq = prereq_sim.get(pair, 0.0)
+        ementa = ementa_sim.get(pair, 0.0)
+        features.append([tpei_diff, prereq, ementa])
+    return np.array(features)
+
+# Treinamento do SVM
+X_final = prepare_final_features(valid_pairs, tpei_data, prereq_sim, ementa_sim)
+y_final = valid_pair_labels
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X_final)
+
+svm_model = SVC(kernel='rbf', probability=True, random_state=42)
+svm_model.fit(X_scaled, y_final)
+
+# Obtenção do threshold final
+y_prob = svm_model.predict_proba(X_scaled)[:, 1]
+precision, recall, thresholds = precision_recall_curve(y_final, y_prob)
+f1_scores = 2 * (precision * recall) / (precision + recall + 1e-8)
+final_threshold = thresholds[np.argmax(f1_scores)]
+
+# Aplicação do SVM aos pares filtrados
+all_final_features = prepare_final_features(filtered_pairs, tpei_data, prereq_sim, ementa_sim)
+all_scaled = scaler.transform(all_final_features)
+final_scores = svm_model.predict_proba(all_scaled)[:, 1]
+equivalent_pairs = [
+    (pair, score) for pair, score in zip(filtered_pairs, final_scores)
+    if score >= final_threshold
+]
+
+# Explicação com SHAP
+explainer = shap.KernelExplainer(svm_model.predict_proba, X_scaled, link="logit")
+shap_values = explainer.shap_values(all_scaled)
+if isinstance(shap_values, list):
+    shap_values = shap_values[1]
+
+# Importância das features
+feature_names = ['TPEI Difference', 'Prerequisite Similarity', 'Ementa Similarity']
+importance = np.abs(shap_values).mean(0)
+importance_df = pd.DataFrame({
+    'feature': feature_names,
+    'importance': importance
+}).sort_values('importance', ascending=False)
+
+# Função para gerar explicações textuais
+def explain_prediction(pair_index, features, shap_values):
+    feature_values = features[pair_index]
+    shap_value = shap_values[pair_index]
+    explanation = []
+    for name, value, impact in zip(feature_names, feature_values, shap_value):
+        direction = "positive" if impact > 0 else "negative"
+        explanation.append(f"{name}: {value:.3f} ({direction} impact: {abs(impact):.3f})")
+    return "\n".join(explanation)
+
+# Geração das explicações para os pares equivalentes
+explanations = []
+for i, (pair, score) in enumerate(equivalent_pairs):
+    explanation = f"Pair: {pair[0]} - {pair[1]}\n"
+    explanation += f"Equivalence Score: {score:.3f}\n"
+    explanation += "Feature Contributions:\n"
+    explanation += explain_prediction(i, all_final_features, shap_values)
+    explanations.append(explanation)
+
